@@ -2,11 +2,12 @@ import type { FundingRate } from "@/lib/types";
 import { fetchWithTimeout } from "@/lib/fetch";
 
 const BASE = "https://api.bybit.com";
+const HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 
 export async function getBybitFundingRates(): Promise<FundingRate[]> {
   const res = await fetchWithTimeout(
     `${BASE}/v5/market/tickers?category=linear`,
-    { next: { revalidate: 60 } }
+    { headers: HEADERS, next: { revalidate: 60 } }
   );
   if (!res.ok) throw new Error(`Bybit API error: ${res.status}`);
 
@@ -39,7 +40,8 @@ export async function getBybitHistory(
   limit = 100
 ): Promise<Array<{ rate: number; fundingTime: number }>> {
   const res = await fetch(
-    `${BASE}/v5/market/funding/history?category=linear&symbol=${symbol}USDT&limit=${limit}`
+    `${BASE}/v5/market/funding/history?category=linear&symbol=${symbol}USDT&limit=${limit}`,
+    { headers: HEADERS }
   );
   if (!res.ok) throw new Error(`Bybit history error: ${res.status}`);
 
