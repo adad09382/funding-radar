@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "init-db": "tsx scripts/init-db.ts",
-    "collect": "tsx scripts/collect.ts"
+    "collect": "tsx scripts/collect.ts",
+    "backfill": "tsx scripts/backfill.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

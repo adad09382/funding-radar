@@ -58,9 +58,9 @@ async function main() {
       const batch = rates.slice(j, j + BATCH);
       await db.batch(
         batch.map((r) => ({
-          sql: `INSERT OR IGNORE INTO funding_rates (symbol, exchange, rate, next_funding_time, recorded_at)
-                VALUES (?, ?, ?, ?, ?)`,
-          args: [r.symbol, r.exchange, r.rate, r.nextFundingTime, now],
+          sql: `INSERT OR IGNORE INTO funding_rates (symbol, exchange, rate, funding_time)
+                VALUES (?, ?, ?, ?)`,
+          args: [r.symbol, r.exchange, r.rate, r.nextFundingTime],
         }))
       );
     }

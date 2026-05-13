@@ -8,18 +8,17 @@ export const db = createClient({
 export async function initDB() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS funding_rates (
-      id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      symbol            TEXT    NOT NULL,
-      exchange          TEXT    NOT NULL,
-      rate              REAL    NOT NULL,
-      next_funding_time INTEGER NOT NULL,
-      recorded_at       INTEGER NOT NULL,
-      UNIQUE (symbol, exchange, next_funding_time)
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol       TEXT    NOT NULL,
+      exchange     TEXT    NOT NULL,
+      rate         REAL    NOT NULL,
+      funding_time INTEGER NOT NULL,
+      UNIQUE (symbol, exchange, funding_time)
     )
   `);
 
   await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_funding_rates_recorded_at
-    ON funding_rates (recorded_at DESC)
+    CREATE INDEX IF NOT EXISTS idx_funding_rates_funding_time
+    ON funding_rates (funding_time DESC)
   `);
 }

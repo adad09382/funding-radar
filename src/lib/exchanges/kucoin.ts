@@ -33,3 +33,28 @@ export async function getKucoinFundingRates(): Promise<FundingRate[]> {
       };
     });
 }
+
+// KuCoin 符號轉換：BTC → XBTUSDTM，其他 → XXXUSDTM
+function toKucoinSymbol(symbol: string): string {
+  return symbol === "BTC" ? "XBTUSDTM" : `${symbol}USDTM`;
+}
+
+export async function getKucoinHistory(
+  symbol: string,
+  fromMs: number,
+  toMs: number
+): Promise<Array<{ rate: number; fundingTime: number }>> {
+  const res = await fetch(
+    `${BASE}/api/v1/funding-history?symbol=${toKucoinSymbol(symbol)}&from=${fromMs}&to=${toMs}&reverse=true&maxCount=1000`
+  );
+  if (!res.ok) throw new Error(`KuCoin history error: ${res.status}`);
+
+  const json: {
+    data?: { dataList?: Array<{ fundingRate: string; timepoint: number }> };
+  } = await res.json();
+
+  return (json.data?.dataList ?? []).map((d) => ({
+    rate: parseFloat(d.fundingRate),
+    fundingTime: d.timepoint,
+  }));
+}

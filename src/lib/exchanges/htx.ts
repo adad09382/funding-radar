@@ -37,3 +37,28 @@ export async function getHtxFundingRates(): Promise<FundingRate[]> {
       };
     });
 }
+
+// HTX 每頁上限 50，需分頁
+export async function getHtxHistory(
+  symbol: string,
+  pageIndex = 1,
+  pageSize = 50
+): Promise<Array<{ rate: number; fundingTime: number; totalPage: number }>> {
+  const res = await fetch(
+    `${BASE}/linear-swap-api/v1/swap_historical_funding_rate?contract_code=${symbol}-USDT&page_index=${pageIndex}&page_size=${pageSize}`
+  );
+  if (!res.ok) throw new Error(`HTX history error: ${res.status}`);
+
+  const json: {
+    data?: {
+      data: Array<{ funding_rate: string; funding_time: string }>;
+      total_page: number;
+    };
+  } = await res.json();
+
+  return (json.data?.data ?? []).map((d) => ({
+    rate: parseFloat(d.funding_rate),
+    fundingTime: parseInt(d.funding_time),
+    totalPage: json.data?.total_page ?? 1,
+  }));
+}

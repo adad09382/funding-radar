@@ -30,3 +30,23 @@ export async function getMexcFundingRates(): Promise<FundingRate[]> {
       };
     });
 }
+
+export async function getMexcHistory(
+  symbol: string,
+  pageNum = 1,
+  pageSize = 100
+): Promise<Array<{ rate: number; fundingTime: number }>> {
+  const res = await fetch(
+    `${BASE}/api/v1/contract/funding_rate/history?symbol=${symbol}_USDT&page_num=${pageNum}&page_size=${pageSize}`
+  );
+  if (!res.ok) throw new Error(`MEXC history error: ${res.status}`);
+
+  const json: {
+    data?: { resultList?: Array<{ fundingRate: number; settleTime: number }> };
+  } = await res.json();
+
+  return (json.data?.resultList ?? []).map((d) => ({
+    rate: d.fundingRate,
+    fundingTime: d.settleTime,
+  }));
+}

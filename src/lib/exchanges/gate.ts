@@ -29,3 +29,23 @@ export async function getGateFundingRates(): Promise<FundingRate[]> {
       };
     });
 }
+
+// Gate.io 歷史 API 時間單位為 Unix 秒
+export async function getGateHistory(
+  symbol: string,
+  fromMs: number,
+  toMs: number
+): Promise<Array<{ rate: number; fundingTime: number }>> {
+  const from = Math.floor(fromMs / 1000);
+  const to = Math.floor(toMs / 1000);
+  const res = await fetch(
+    `${BASE}/api/v4/futures/usdt/funding_rate?contract=${symbol}_USDT&from=${from}&to=${to}&limit=1000`
+  );
+  if (!res.ok) throw new Error(`Gate history error: ${res.status}`);
+
+  const data: Array<{ r: string; t: number }> = await res.json();
+  return data.map((d) => ({
+    rate: parseFloat(d.r),
+    fundingTime: d.t * 1000,
+  }));
+}
