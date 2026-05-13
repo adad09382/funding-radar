@@ -1,0 +1,31 @@
+name: Collect Funding Rates
+
+on:
+  schedule:
+    - cron: "0 0,8,16 * * *"   # 每天 UTC 00:00 / 08:00 / 16:00（對應各交易所結算）
+  workflow_dispatch:             # 手動觸發
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: 初始化 DB schema
+        run: npx tsx scripts/init-db.ts
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      - name: 收集資金費率
+        run: npx tsx scripts/collect.ts
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
