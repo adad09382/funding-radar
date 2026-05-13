@@ -13,12 +13,11 @@ import { getEdgeXFundingRates } from "./edgex";
 import { getTradexyzFundingRates } from "./tradexyz";
 import type { FundingRate } from "@/lib/types";
 
+// Binance and Bybit block cloud provider IPs; they are fetched client-side instead.
 export async function getAllFundingRates(): Promise<FundingRate[]> {
   const results = await Promise.allSettled([
-    // CEX
-    getBinanceFundingRates(),
+    // CEX (Binance + Bybit handled client-side via CORS)
     getOkxFundingRates(),
-    getBybitFundingRates(),
     getBitgetFundingRates(),
     getMexcFundingRates(),
     getGateFundingRates(),
@@ -35,8 +34,7 @@ export async function getAllFundingRates(): Promise<FundingRate[]> {
   return results.flatMap((r, i) => {
     if (r.status === "rejected") {
       const names = [
-        "binance","okx","bybit","bitget",
-        "mexc","gate","htx","kucoin",
+        "okx","bitget","mexc","gate","htx","kucoin",
         "hyperliquid","asterdex","lighter","edgex","tradexyz",
       ];
       console.error(`[${names[i]}] fetch failed:`, r.reason);
