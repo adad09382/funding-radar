@@ -69,7 +69,7 @@ async function main() {
 
   const cutoff = now - 35 * 24 * 60 * 60 * 1000;
   const deleted = await db.execute(
-    `DELETE FROM funding_rates WHERE recorded_at < ${cutoff}`
+    `DELETE FROM funding_rates WHERE funding_time < ${cutoff}`
   );
   console.log(`清理舊資料: ${deleted.rowsAffected} 筆`);
   console.log(`完成，共寫入 ${total} 筆`);

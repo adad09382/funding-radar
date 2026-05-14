@@ -1,4 +1,13 @@
 import { createClient } from "@libsql/client";
+import { readFileSync } from "fs";
+
+try {
+  const text = readFileSync(".env.local", "utf-8");
+  for (const line of text.split("\n")) {
+    const match = line.match(/^([A-Z_][A-Z0-9_]*)=(.+)$/);
+    if (match) process.env[match[1]] = match[2].trim();
+  }
+} catch {}
 
 const db = createClient({
   url: process.env.TURSO_DATABASE_URL!,
