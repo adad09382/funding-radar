@@ -15,7 +15,7 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN!,
 });
 
-const DAYS_BACK = 60;
+const DAYS_BACK = 30;
 const START_MS = Date.now() - DAYS_BACK * 86_400_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DELAY = 250; // ms between requests

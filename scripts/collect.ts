@@ -67,7 +67,7 @@ async function main() {
     total += rates.length;
   }
 
-  const cutoff = now - 180 * 24 * 60 * 60 * 1000;
+  const cutoff = now - 35 * 24 * 60 * 60 * 1000;
   const deleted = await db.execute(
     `DELETE FROM funding_rates WHERE recorded_at < ${cutoff}`
   );
