@@ -10,7 +10,8 @@
     "init-db": "tsx scripts/init-db.ts",
     "collect": "tsx scripts/collect.ts",
     "backfill": "tsx scripts/backfill.ts",
-    "verify": "tsx scripts/verify.ts"
+    "verify": "tsx scripts/verify.ts",
+    "incremental": "tsx scripts/incremental.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

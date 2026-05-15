@@ -2,8 +2,8 @@ name: Collect Funding Rates
 
 on:
   schedule:
-    - cron: "0 0,8,16 * * *"   # 每天 UTC 00:00 / 08:00 / 16:00（對應各交易所結算）
-  workflow_dispatch:             # 手動觸發
+    - cron: "0 */4 * * *"   # 每 4 小時補齊一次，自動回補缺口
+  workflow_dispatch:          # 手動觸發
 
 jobs:
   collect:
@@ -24,8 +24,8 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
-      - name: 收集資金費率
-        run: npx tsx scripts/collect.ts
+      - name: 增量補齊資金費率
+        run: npx tsx scripts/incremental.ts
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
