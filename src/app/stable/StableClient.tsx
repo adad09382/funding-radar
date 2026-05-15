@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import type { StableAsset } from "@/lib/types";
 
 function Hint({ text }: { text: string }) {
@@ -73,6 +74,7 @@ function dirColor(v: number) {
   return v >= 0 ? "text-emerald-400" : "text-red-400";
 }
 
+
 interface Props {
   initialWindow: WindowDay;
 }
@@ -113,6 +115,8 @@ export function StableClient({ initialWindow }: Props) {
   }
 
   return (
+    <>
+    {(initialLoading || pending) && <LoadingOverlay />}
     <div className="p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -196,7 +200,7 @@ export function StableClient({ initialWindow }: Props) {
               </th>
             </tr>
           </thead>
-          <tbody className={pending ? "opacity-40 pointer-events-none" : ""}>
+          <tbody>
             {initialLoading && (
               <tr>
                 <td colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
@@ -254,5 +258,6 @@ export function StableClient({ initialWindow }: Props) {
         </p>
       )}
     </div>
+    </>
   );
 }

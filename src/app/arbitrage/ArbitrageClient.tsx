@@ -8,6 +8,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 
 function buildArbitrageList(rates: FundingRate[]): ArbitrageOpportunity[] {
   const bySymbol = new Map<string, FundingRate[]>();
@@ -61,15 +62,14 @@ export function ArbitrageClient({ serverRates }: { serverRates: FundingRate[] })
   const opportunities = buildArbitrageList(rates);
 
   return (
+    <>
+    {clientLoading && <LoadingOverlay message="載入 Binance · Bybit 費率中…" />}
     <div className="p-6">
       <div className="mb-4 flex items-baseline gap-3">
         <h1 className="text-xl font-bold">套利機會排行</h1>
         <span className="text-sm text-zinc-500">
           {opportunities.length} 個機會 · 按年化收益排序
         </span>
-        {clientLoading && (
-          <span className="text-xs text-zinc-600 animate-pulse">Binance · Bybit 載入中...</span>
-        )}
       </div>
       <p className="text-sm text-zinc-500 mb-4">
         做多低費率交易所合約 + 做空高費率交易所合約，賺取費率差。
@@ -124,5 +124,6 @@ export function ArbitrageClient({ serverRates }: { serverRates: FundingRate[] })
         </Table>
       </div>
     </div>
+    </>
   );
 }

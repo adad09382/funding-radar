@@ -9,6 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
+import { LoadingOverlay } from "@/components/LoadingOverlay";
 import { RateCell } from "@/components/RateCell";
 
 function formatCountdown(nextFundingTime: number): string {
@@ -176,15 +177,12 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
   }
 
   return (
+    <>
+    {clientLoading && <LoadingOverlay message="載入 Binance · Bybit 費率中…" />}
     <div className="p-6">
       <div className="mb-6">
         <div className="flex items-baseline gap-3 mb-1">
           <h1 className="text-xl font-bold">RWA 專區</h1>
-          {clientLoading && (
-            <span className="text-xs text-zinc-600 animate-pulse">
-              Binance · Bybit 載入中...
-            </span>
-          )}
           {sortExchange && (
             <span className="text-xs text-zinc-500">
               依{" "}
@@ -257,5 +255,6 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
         })
       )}
     </div>
+    </>
   );
 }
