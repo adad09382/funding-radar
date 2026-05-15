@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
 import type { StableAsset } from "@/lib/types";
 
@@ -74,15 +74,23 @@ function dirColor(v: number) {
 }
 
 interface Props {
-  initialAssets: StableAsset[];
   initialWindow: WindowDay;
 }
 
-export function StableClient({ initialAssets, initialWindow }: Props) {
+export function StableClient({ initialWindow }: Props) {
   const [activeWindow, setActiveWindow] = useState<WindowDay>(initialWindow);
   const [sort, setSort] = useState<SortMode>("yield");
-  const [rawAssets, setRawAssets] = useState<StableAsset[]>(initialAssets);
+  const [rawAssets, setRawAssets] = useState<StableAsset[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    startTransition(async () => {
+      const res = await fetch(`/api/stable?window=${initialWindow}`);
+      if (res.ok) setRawAssets(await res.json());
+      setInitialLoading(false);
+    });
+  }, []);
 
   // Sort is client-side — no API call needed
   const assets = useMemo(() => {
@@ -189,7 +197,14 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
             </tr>
           </thead>
           <tbody className={pending ? "opacity-40 pointer-events-none" : ""}>
-            {assets.length === 0 && (
+            {initialLoading && (
+              <tr>
+                <td colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
+                  載入中…
+                </td>
+              </tr>
+            )}
+            {!initialLoading && assets.length === 0 && (
               <tr>
                 <td colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
                   暫無資料
