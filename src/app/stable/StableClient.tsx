@@ -4,6 +4,17 @@ import { useState, useTransition, useMemo, useEffect } from "react";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
 import { LoadingOverlay } from "@/components/LoadingOverlay";
 import type { StableAsset } from "@/lib/types";
+import { RWA_ASSETS } from "@/lib/types";
+
+const RWA_CATEGORY_LABEL: Record<string, { label: string; cls: string }> = {
+  stock:     { label: "股票",   cls: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  etf:       { label: "ETF",    cls: "bg-purple-500/15 text-purple-400 border-purple-500/30" },
+  commodity: { label: "大宗",   cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  forex:     { label: "外匯",   cls: "bg-teal-500/15 text-teal-400 border-teal-500/30" },
+};
+
+// symbol → category map，只取主要 symbol（不含 symbolOverride）
+const RWA_MAP = new Map(RWA_ASSETS.map((a) => [a.symbol, a.category]));
 
 function Hint({ text }: { text: string }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -221,7 +232,17 @@ export function StableClient({ initialWindow }: Props) {
                 className="border-b border-zinc-800/60 hover:bg-zinc-900/50"
               >
                 <td className="py-2 px-3 text-zinc-600 text-xs">{i + 1}</td>
-                <td className="py-2 px-3 font-mono font-bold text-white">{a.symbol}</td>
+                <td className="py-2 px-3">
+                  <span className="font-mono font-bold text-white">{a.symbol}</span>
+                  {RWA_MAP.has(a.symbol) && (() => {
+                    const { label, cls } = RWA_CATEGORY_LABEL[RWA_MAP.get(a.symbol)!];
+                    return (
+                      <span className={`ml-1.5 inline-block text-[10px] font-medium px-1.5 py-0.5 rounded border ${cls}`}>
+                        {label}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="py-2 px-3">
                   <ExchangeBadge exchange={a.exchange as never} />
                 </td>
