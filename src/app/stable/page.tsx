@@ -1,141 +1,82 @@
 import { db } from "@/lib/turso";
-import type { StableRateAsset, Exchange } from "@/lib/types";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import { ExchangeBadge } from "@/components/ExchangeBadge";
+import type { StableAsset } from "@/lib/types";
+import { StableClient } from "./StableClient";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
-async function getStableAssets(): Promise<StableRateAsset[]> {
-  const since30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const since90d = Date.now() - 90 * 24 * 60 * 60 * 1000;
+const DEFAULT_WINDOW = 7;
+
+function median(arr: number[]): number {
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+async function fetchStableAssets(windowDays: number): Promise<StableAsset[]> {
+  const since = Date.now() - windowDays * 86_400_000;
+  const minRecords = Math.max(2, windowDays);
 
   const result = await db.execute(`
-    SELECT
-      symbol, exchange,
-      AVG(CASE WHEN recorded_at >= ${since30d} THEN rate END) AS avg30d,
-      AVG(CASE WHEN recorded_at >= ${since90d} THEN rate END) AS avg90d,
-      CAST(SUM(CASE WHEN recorded_at >= ${since30d} AND rate > 0 THEN 1 ELSE 0 END) AS REAL) /
-        NULLIF(COUNT(CASE WHEN recorded_at >= ${since30d} THEN 1 END), 0) AS positive_ratio30d,
-      COUNT(CASE WHEN recorded_at >= ${since30d} THEN 1 END) AS sample_count
-    FROM funding_rates
-    WHERE recorded_at >= ${since90d}
+    SELECT symbol, exchange,
+      GROUP_CONCAT(rate) AS rates,
+      COUNT(*)           AS cnt,
+      AVG(rate)          AS avg_rate,
+      MIN(rate)          AS min_rate,
+      MAX(rate)          AS max_rate
+    FROM (
+      SELECT symbol, exchange, rate
+      FROM funding_rates
+      WHERE funding_time >= ${since}
+      ORDER BY symbol, exchange, funding_time ASC
+    )
     GROUP BY symbol, exchange
-    HAVING sample_count >= 5
+    HAVING cnt >= ${minRecords} AND ABS(avg_rate) > 0.000005
   `);
 
   return result.rows
-    .map((r): StableRateAsset => {
-      const ratio = (r.positive_ratio30d as number) ?? 0.5;
+    .map((row) => {
+      const rates = (row.rates as string).split(",").map(Number);
+      const cnt = row.cnt as number;
+      const settlementsPerYear = (cnt / windowDays) * 365;
+      const settlementsPerDay = cnt / windowDays;
+
+      const med = median(rates);
+      const dir = med >= 0 ? 1 : -1;
+      const consistency = rates.filter((r) => (dir > 0 ? r > 0 : r < 0)).length / cnt;
+      const annMedian = med * settlementsPerYear;
+      const annMean = (row.avg_rate as number) * settlementsPerYear;
+      const annWorst = (dir > 0 ? (row.min_rate as number) : (row.max_rate as number)) * settlementsPerYear;
+      const annCurrent = rates[rates.length - 1] * settlementsPerYear;
+
+      let consecutive = 0;
+      for (let i = rates.length - 1; i >= 0; i--) {
+        if (dir > 0 ? rates[i] > 0 : rates[i] < 0) consecutive++;
+        else break;
+      }
+      const consecutiveDays = Math.round((consecutive / settlementsPerDay) * 10) / 10;
+
       return {
-        symbol: r.symbol as string,
-        exchange: r.exchange as Exchange,
-        avgRate30d: (r.avg30d as number) ?? 0,
-        avgRate90d: (r.avg90d as number) ?? 0,
-        positiveRatio30d: ratio,
-        direction: ratio >= 0.8 ? "positive" : ratio <= 0.2 ? "negative" : "neutral",
-        sampleCount: r.sample_count as number,
-      };
+        symbol: row.symbol as string,
+        exchange: row.exchange as string,
+        heatmap: rates.slice(-30),
+        consecutiveDays,
+        consistency,
+        annMean,
+        annMedian,
+        annWorst,
+        annCurrent,
+        cnt,
+      } satisfies StableAsset;
     })
-    .filter((a) => a.direction !== "neutral")
-    .sort((a, b) => Math.abs(b.avgRate30d) - Math.abs(a.avgRate30d));
+    .sort((a, b) => Math.abs(b.annMedian) - Math.abs(a.annMedian))
+    .slice(0, 100);
 }
 
 export default async function StablePage() {
-  let assets: StableRateAsset[] = [];
-  let error = "";
-
+  let assets: StableAsset[] = [];
   try {
-    assets = await getStableAssets();
-  } catch {
-    error = "尚無歷史資料，請等 GitHub Actions 收集幾次後再來查看。";
-  }
+    assets = await fetchStableAssets(DEFAULT_WINDOW);
+  } catch {}
 
-  const positive = assets.filter((a) => a.direction === "positive");
-  const negative = assets.filter((a) => a.direction === "negative");
-
-  return (
-    <div className="p-6 space-y-8">
-      <div>
-        <h1 className="text-xl font-bold mb-1">穩定費率標的</h1>
-        <p className="text-sm text-zinc-500">
-          過去 30 天正費率佔比 ≥ 80% 或 ≤ 20% 的標的，適合長期期現套利。
-        </p>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-400">
-          {error}
-        </div>
-      )}
-
-      {positive.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-green-400 mb-2 uppercase tracking-wide">
-            穩定正費率（做空可收費）
-          </h2>
-          <StableTable assets={positive} />
-        </section>
-      )}
-
-      {negative.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-red-400 mb-2 uppercase tracking-wide">
-            穩定負費率（做多可收費）
-          </h2>
-          <StableTable assets={negative} />
-        </section>
-      )}
-    </div>
-  );
-}
-
-function StableTable({ assets }: { assets: StableRateAsset[] }) {
-  return (
-    <div className="rounded-lg border border-zinc-800 overflow-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-zinc-800 hover:bg-transparent">
-            <TableHead className="text-zinc-400">幣種</TableHead>
-            <TableHead className="text-zinc-400">交易所</TableHead>
-            <TableHead className="text-zinc-400">30日均費率</TableHead>
-            <TableHead className="text-zinc-400">90日均費率</TableHead>
-            <TableHead className="text-zinc-400">正費率佔比</TableHead>
-            <TableHead className="text-zinc-400">樣本數</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {assets.map((a, i) => (
-            <TableRow key={i} className="border-zinc-800 hover:bg-zinc-900/50">
-              <TableCell className="font-mono font-bold text-white">
-                {a.symbol}
-              </TableCell>
-              <TableCell>
-                <ExchangeBadge exchange={a.exchange} />
-              </TableCell>
-              <TableCell className="font-mono text-sm">
-                <span className={a.avgRate30d >= 0 ? "text-green-400" : "text-red-400"}>
-                  {a.avgRate30d >= 0 ? "+" : ""}
-                  {(a.avgRate30d * 100).toFixed(4)}%
-                </span>
-              </TableCell>
-              <TableCell className="font-mono text-sm text-zinc-400">
-                {a.avgRate90d >= 0 ? "+" : ""}
-                {(a.avgRate90d * 100).toFixed(4)}%
-              </TableCell>
-              <TableCell>
-                <span className={`font-mono text-sm ${
-                  a.positiveRatio30d >= 0.8 ? "text-green-400" : "text-red-400"
-                }`}>
-                  {(a.positiveRatio30d * 100).toFixed(0)}%
-                </span>
-              </TableCell>
-              <TableCell className="text-zinc-500 text-sm">{a.sampleCount}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
+  return <StableClient initialAssets={assets} initialWindow={DEFAULT_WINDOW} />;
 }

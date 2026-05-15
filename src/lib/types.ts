@@ -62,6 +62,19 @@ export interface StableRateAsset {
   sampleCount: number;
 }
 
+export interface StableAsset {
+  symbol: string;
+  exchange: string;
+  heatmap: number[];
+  consecutiveDays: number;
+  consistency: number;
+  annMean: number;
+  annMedian: number;
+  annWorst: number;
+  annCurrent: number;
+  cnt: number;
+}
+
 export interface FundingRateRecord {
   id?: number;
   symbol: string;

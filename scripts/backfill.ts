@@ -19,6 +19,15 @@ const DAYS_BACK = 30;
 const START_MS = Date.now() - DAYS_BACK * 86_400_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const DELAY = 250; // ms between requests
+const FETCH_TIMEOUT = 8_000; // ms
+
+const ONLY = process.argv.find((a) => a.startsWith("--only="))?.slice(7)?.toLowerCase();
+
+function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+  return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
 
 // ─── DB 寫入 ────────────────────────────────────────────────────────────────
 
@@ -65,7 +74,7 @@ async function backfillBinance(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${sym}USDT&startTime=${START_MS}&limit=1000`
       );
       if (!res.ok) continue;
@@ -88,8 +97,8 @@ async function backfillBybit(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch(
-        `https://api.bybit.com/v5/market/funding/history?category=linear&symbol=${sym}USDT&startTime=${START_MS}&limit=200`,
+      const res = await fetchWithTimeout(
+        `https://api.bybit.com/v5/market/funding/history?category=linear&symbol=${sym}USDT&startTime=${START_MS}&endTime=${Date.now()}&limit=200`,
         { headers: { "User-Agent": "Mozilla/5.0" } }
       );
       if (!res.ok) continue;
@@ -119,7 +128,7 @@ async function backfillOkx(symbols: string[]) {
       await sleep(DELAY);
       try {
         const url = `https://www.okx.com/api/v5/public/funding-rate-history?instId=${sym}-USDT-SWAP&limit=100${after ? `&after=${after}` : ""}`;
-        const res = await fetch(url);
+        const res = await fetchWithTimeout(url);
         if (!res.ok) break;
         const json: { data: Array<{ fundingRate: string; fundingTime: string }> } = await res.json();
         const list = json.data ?? [];
@@ -150,7 +159,7 @@ async function backfillBitget(symbols: string[]) {
     while (true) {
       await sleep(DELAY);
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://api.bitget.com/api/v2/mix/market/history-fund-rate?symbol=${sym}USDT&productType=USDT-FUTURES&pageSize=100&pageNo=${pageNo}`
         );
         if (!res.ok) break;
@@ -183,7 +192,7 @@ async function backfillMexc(symbols: string[]) {
     while (true) {
       await sleep(DELAY);
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://contract.mexc.com/api/v1/contract/funding_rate/history?symbol=${sym}_USDT&page_num=${pageNum}&page_size=100`
         );
         if (!res.ok) break;
@@ -217,7 +226,7 @@ async function backfillGate(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://api.gateio.ws/api/v4/futures/usdt/funding_rate?contract=${sym}_USDT&from=${from}&to=${to}&limit=1000`
       );
       if (!res.ok) continue;
@@ -243,7 +252,7 @@ async function backfillHtx(symbols: string[]) {
     while (true) {
       await sleep(DELAY);
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://api.hbdm.com/linear-swap-api/v1/swap_historical_funding_rate?contract_code=${sym}-USDT&page_index=${pageIndex}&page_size=50`
         );
         if (!res.ok) break;
@@ -277,7 +286,7 @@ async function backfillKucoin(symbols: string[]) {
     await sleep(DELAY);
     try {
       const kSym = sym === "BTC" ? "XBTUSDTM" : `${sym}USDTM`;
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://api-futures.kucoin.com/api/v1/funding-history?symbol=${kSym}&from=${START_MS}&to=${Date.now()}&reverse=true&maxCount=1000`
       );
       if (!res.ok) continue;
@@ -301,7 +310,7 @@ async function backfillHyperliquid(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch("https://api.hyperliquid.xyz/info", {
+      const res = await fetchWithTimeout("https://api.hyperliquid.xyz/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "fundingHistory", coin: sym, startTime: START_MS }),
@@ -325,7 +334,7 @@ async function backfillTradexyz(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch("https://api.hyperliquid.xyz/info", {
+      const res = await fetchWithTimeout("https://api.hyperliquid.xyz/info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "fundingHistory", coin: `xyz:${sym}`, startTime: START_MS }),
@@ -350,7 +359,7 @@ async function backfillAsterdex(symbols: string[]) {
   for (const sym of symbols) {
     await sleep(DELAY);
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://fapi.asterdex.com/fapi/v1/fundingRate?symbol=${sym}USDT&startTime=${START_MS}&limit=1000`
       );
       if (!res.ok) continue;
@@ -403,18 +412,20 @@ async function main() {
     getSymbols("AsterDEX", getAsterDexFundingRates),
   ]);
 
+  const should = (name: string) => !ONLY || ONLY === name;
+
   // 依序回填，避免同時打太多 API
-  if (binanceSymbols.length) await backfillBinance(binanceSymbols);
-  if (bybitSymbols.length) await backfillBybit(bybitSymbols);
-  if (okxSymbols.length) await backfillOkx(okxSymbols);
-  if (bitgetSymbols.length) await backfillBitget(bitgetSymbols);
-  if (mexcSymbols.length) await backfillMexc(mexcSymbols);
-  if (gateSymbols.length) await backfillGate(gateSymbols);
-  if (htxSymbols.length) await backfillHtx(htxSymbols);
-  if (kucoinSymbols.length) await backfillKucoin(kucoinSymbols);
-  if (hlSymbols.length) await backfillHyperliquid(hlSymbols);
-  if (tradexyzSymbols.length) await backfillTradexyz(tradexyzSymbols);
-  if (asterSymbols.length) await backfillAsterdex(asterSymbols);
+  if (should("binance")    && binanceSymbols.length)   await backfillBinance(binanceSymbols);
+  if (should("bybit")      && bybitSymbols.length)     await backfillBybit(bybitSymbols);
+  if (should("okx")        && okxSymbols.length)       await backfillOkx(okxSymbols);
+  if (should("bitget")     && bitgetSymbols.length)    await backfillBitget(bitgetSymbols);
+  if (should("mexc")       && mexcSymbols.length)      await backfillMexc(mexcSymbols);
+  if (should("gate")       && gateSymbols.length)      await backfillGate(gateSymbols);
+  if (should("htx")        && htxSymbols.length)       await backfillHtx(htxSymbols);
+  if (should("kucoin")     && kucoinSymbols.length)    await backfillKucoin(kucoinSymbols);
+  if (should("hyperliquid")&& hlSymbols.length)        await backfillHyperliquid(hlSymbols);
+  if (should("tradexyz")   && tradexyzSymbols.length)  await backfillTradexyz(tradexyzSymbols);
+  if (should("asterdex")   && asterSymbols.length)     await backfillAsterdex(asterSymbols);
 
   const elapsed = Math.round((Date.now() - startedAt) / 1000);
   console.log(`\n✓ 全部完成，耗時 ${Math.floor(elapsed / 60)}m ${elapsed % 60}s`);
