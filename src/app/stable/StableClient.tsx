@@ -1,8 +1,39 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { ExchangeBadge } from "@/components/ExchangeBadge";
 import type { StableAsset } from "@/lib/types";
+
+function Hint({ text }: { text: string }) {
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+
+  return (
+    <>
+      <span
+        className="ml-1 align-middle text-zinc-600 hover:text-zinc-400 cursor-help select-none inline-block"
+        onMouseEnter={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setPos({ x: r.left, y: r.top });
+        }}
+        onMouseLeave={() => setPos(null)}
+      >
+        ⓘ
+      </span>
+      {pos && (
+        <div
+          className="fixed z-50 w-56 rounded-lg bg-zinc-900 border border-zinc-700 px-3 py-2 text-[11px] text-zinc-300 leading-relaxed shadow-xl pointer-events-none"
+          style={{
+            left: Math.min(pos.x, (typeof window !== "undefined" ? window.innerWidth : 800) - 240),
+            top: pos.y - 8,
+            transform: "translateY(-100%)",
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </>
+  );
+}
 
 const WINDOWS = [1, 3, 5, 7, 14, 30] as const;
 type WindowDay = (typeof WINDOWS)[number];
@@ -48,24 +79,29 @@ interface Props {
 }
 
 export function StableClient({ initialAssets, initialWindow }: Props) {
-  const [window, setWindow] = useState<WindowDay>(initialWindow);
+  const [activeWindow, setActiveWindow] = useState<WindowDay>(initialWindow);
   const [sort, setSort] = useState<SortMode>("yield");
-  const [assets, setAssets] = useState<StableAsset[]>(initialAssets);
+  const [rawAssets, setRawAssets] = useState<StableAsset[]>(initialAssets);
   const [pending, startTransition] = useTransition();
 
-  async function load(w: WindowDay, s: SortMode) {
-    const res = await fetch(`/api/stable?window=${w}&sort=${s}`);
-    if (res.ok) setAssets(await res.json());
-  }
+  // Sort is client-side — no API call needed
+  const assets = useMemo(() => {
+    const arr = [...rawAssets];
+    if (sort === "yield")
+      return arr.sort((a, b) => Math.abs(b.annMedian) - Math.abs(a.annMedian));
+    if (sort === "consistent")
+      return arr.sort(
+        (a, b) => b.consistency - a.consistency || Math.abs(b.annMedian) - Math.abs(a.annMedian)
+      );
+    return arr.sort((a, b) => Math.abs(b.annCurrent) - Math.abs(a.annCurrent));
+  }, [rawAssets, sort]);
 
   function onWindow(w: WindowDay) {
-    setWindow(w);
-    startTransition(() => { load(w, sort); });
-  }
-
-  function onSort(s: SortMode) {
-    setSort(s);
-    startTransition(() => { load(window, s); });
+    setActiveWindow(w);
+    startTransition(async () => {
+      const res = await fetch(`/api/stable?window=${w}`);
+      if (res.ok) setRawAssets(await res.json());
+    });
   }
 
   return (
@@ -82,8 +118,9 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
             <button
               key={w}
               onClick={() => onWindow(w)}
+              disabled={pending}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                window === w
+                activeWindow === w
                   ? "bg-zinc-100 text-zinc-900"
                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
               }`}
@@ -91,6 +128,7 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
               {w}天
             </button>
           ))}
+          {pending && <span className="text-xs text-zinc-500 self-center ml-1">載入中…</span>}
         </div>
       </div>
 
@@ -100,7 +138,7 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
         {(["yield", "consistent", "recent"] as SortMode[]).map((s) => (
           <button
             key={s}
-            onClick={() => onSort(s)}
+            onClick={() => setSort(s)}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
               sort === s
                 ? "bg-zinc-700 text-zinc-100"
@@ -110,7 +148,6 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
             {SORT_LABELS[s]}
           </button>
         ))}
-        {pending && <span className="text-xs text-zinc-500 ml-2">載入中…</span>}
       </div>
 
       {/* 表格 */}
@@ -118,19 +155,40 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-800">
-              <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">#</th>
+              <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400">#</th>
               <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400">幣種</th>
               <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400">交易所</th>
-              <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">結算歷史</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">連續天數</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">一致率</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">中位數 年化</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">均值 年化</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">最差 年化</th>
-              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">當前 年化</th>
+              <th className="text-left py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                結算歷史
+                <Hint text="每格代表一次結算期。綠色＝正費率（空方付多方），紅色＝負費率（多方付空方）。顏色越亮代表費率絕對值越大。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                連續天數
+                <Hint text="最近連續幾天的結算都與整體方向一致。例如 8.0天 代表最近 8 天每次結算都是正費率。數字越大代表趨勢越穩定。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                一致率
+                <Hint text="窗口內與主方向一致的結算佔比。100% 表示該期間每次都是正費率（或每次都是負費率），代表方向極為穩定。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                中位數 年化
+                <Hint text="用期間費率的中位數估算年化收益。比均值更穩健，不受少數極端高/低費率影響，是評估長期套利收益的主要參考指標。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                均值 年化
+                <Hint text="用期間費率的算術平均值估算年化收益。若有少數異常高費率拉高平均，此數字會高於中位數，需謹慎參考。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                最差 年化
+                <Hint text="用期間最不利的單次費率估算年化收益，代表最壞情況。正方向標的取最低那筆，負方向標的取最高那筆。是風險評估的下限參考。" />
+              </th>
+              <th className="text-right py-2.5 px-3 text-xs font-medium text-zinc-400 whitespace-nowrap">
+                當前 年化
+                <Hint text="用最近一次結算費率估算年化收益，反映當下實際費率。若與中位數差距大，代表近期費率有明顯異動。" />
+              </th>
             </tr>
           </thead>
-          <tbody className={pending ? "opacity-50" : ""}>
+          <tbody className={pending ? "opacity-40 pointer-events-none" : ""}>
             {assets.length === 0 && (
               <tr>
                 <td colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
@@ -139,7 +197,10 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
               </tr>
             )}
             {assets.map((a, i) => (
-              <tr key={`${a.symbol}-${a.exchange}`} className="border-b border-zinc-800/60 hover:bg-zinc-900/50">
+              <tr
+                key={`${a.symbol}-${a.exchange}`}
+                className="border-b border-zinc-800/60 hover:bg-zinc-900/50"
+              >
                 <td className="py-2 px-3 text-zinc-600 text-xs">{i + 1}</td>
                 <td className="py-2 px-3 font-mono font-bold text-white">{a.symbol}</td>
                 <td className="py-2 px-3">
@@ -160,7 +221,7 @@ export function StableClient({ initialAssets, initialWindow }: Props) {
                 <td className={`py-2 px-3 text-right font-mono text-xs ${dirColor(a.annMean)}`}>
                   {pct(a.annMean)}
                 </td>
-                <td className={`py-2 px-3 text-right font-mono text-xs text-zinc-500`}>
+                <td className="py-2 px-3 text-right font-mono text-xs text-zinc-500">
                   {pct(a.annWorst)}
                 </td>
                 <td className={`py-2 px-3 text-right font-mono text-xs ${dirColor(a.annCurrent)}`}>

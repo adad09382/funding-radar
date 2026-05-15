@@ -69,7 +69,7 @@ async function fetchStableAssets(windowDays: number): Promise<StableAsset[]> {
       } satisfies StableAsset;
     })
     .sort((a, b) => Math.abs(b.annMedian) - Math.abs(a.annMedian))
-    .slice(0, 100);
+    .slice(0, 300);
 }
 
 export default async function StablePage() {

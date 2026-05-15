@@ -31,6 +31,11 @@ async function main() {
     ON funding_rates (funding_time DESC)
   `);
 
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_fr_sym_ex_time
+    ON funding_rates (symbol, exchange, funding_time ASC)
+  `);
+
   console.log("DB 初始化完成");
 }
 
