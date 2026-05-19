@@ -24,8 +24,13 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
-      - name: 增量補齊資金費率
+      - name: 增量補齊（OKX / Bitget / MEXC / Gate / HTX / KuCoin / Hyperliquid / Trade.xyz）
         run: npx tsx scripts/incremental.ts
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+      - name: 增量補齊（Binance / Bybit / AsterDEX，經 Vercel）
+        run: |
+          curl -f --max-time 120 -X POST \
+            "${{ secrets.COLLECT_URL }}/api/collect?secret=${{ secrets.COLLECT_SECRET }}"

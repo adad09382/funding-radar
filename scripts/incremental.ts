@@ -56,56 +56,6 @@ function startOf(latest: number | undefined): number {
   return latest !== undefined ? latest + 1 : Date.now() - NEW_SYMBOL_LOOKBACK;
 }
 
-// ─── Binance ─────────────────────────────────────────────────────────────────
-
-async function collectBinance(symbols: string[]) {
-  console.log(`\n[Binance] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("binance");
-  let total = 0;
-  for (const sym of symbols) {
-    await sleep(DELAY);
-    try {
-      const since = startOf(latest.get(sym));
-      const res = await fetchWithTimeout(
-        `https://fapi.binance.com/fapi/v1/fundingRate?symbol=${sym}USDT&startTime=${since}&limit=1000`
-      );
-      if (!res.ok) continue;
-      const data: Array<{ fundingRate: string; fundingTime: number }> = await res.json();
-      total += await insertBatch(
-        data.map((d) => ({ symbol: sym, exchange: "binance", rate: parseFloat(d.fundingRate), fundingTime: d.fundingTime }))
-      );
-    } catch {}
-  }
-  console.log(`[Binance] +${total} 筆`);
-}
-
-// ─── Bybit ───────────────────────────────────────────────────────────────────
-
-async function collectBybit(symbols: string[]) {
-  console.log(`\n[Bybit] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("bybit");
-  let total = 0;
-  for (const sym of symbols) {
-    await sleep(DELAY);
-    try {
-      const since = startOf(latest.get(sym));
-      const res = await fetchWithTimeout(
-        `https://api.bybit.com/v5/market/funding/history?category=linear&symbol=${sym}USDT&startTime=${since}&endTime=${Date.now()}&limit=200`,
-        { headers: { "User-Agent": "Mozilla/5.0" } }
-      );
-      if (!res.ok) continue;
-      const json: { result: { list: Array<{ fundingRate: string; fundingRateTimestamp: string }> } } = await res.json();
-      total += await insertBatch(
-        (json.result?.list ?? []).map((d) => ({
-          symbol: sym, exchange: "bybit", rate: parseFloat(d.fundingRate),
-          fundingTime: parseInt(d.fundingRateTimestamp),
-        }))
-      );
-    } catch {}
-  }
-  console.log(`[Bybit] +${total} 筆`);
-}
-
 // ─── OKX ─────────────────────────────────────────────────────────────────────
 
 async function collectOkx(symbols: string[]) {
@@ -330,46 +280,20 @@ async function collectTradexyz(symbols: string[]) {
   console.log(`[Trade.xyz] +${total} 筆`);
 }
 
-// ─── AsterDEX ─────────────────────────────────────────────────────────────────
-
-async function collectAsterdex(symbols: string[]) {
-  console.log(`\n[AsterDEX] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("asterdex");
-  let total = 0;
-  for (const sym of symbols) {
-    await sleep(DELAY);
-    try {
-      const since = startOf(latest.get(sym));
-      const res = await fetchWithTimeout(
-        `https://fapi.asterdex.com/fapi/v1/fundingRate?symbol=${sym}USDT&startTime=${since}&limit=1000`
-      );
-      if (!res.ok) continue;
-      const data: Array<{ fundingRate: string; fundingTime: number }> = await res.json();
-      total += await insertBatch(
-        data.map((d) => ({ symbol: sym, exchange: "asterdex", rate: parseFloat(d.fundingRate), fundingTime: d.fundingTime }))
-      );
-    } catch {}
-  }
-  console.log(`[AsterDEX] +${total} 筆`);
-}
-
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
   const startedAt = Date.now();
   console.log(`[${new Date(startedAt).toISOString()}] 增量補齊，新幣種回溯 7 天\n`);
 
-  const { getBinanceFundingRates }    = await import("../src/lib/exchanges/binance");
-  const { getBybitFundingRates }      = await import("../src/lib/exchanges/bybit");
-  const { getOkxFundingRates }        = await import("../src/lib/exchanges/okx");
-  const { getBitgetFundingRates }     = await import("../src/lib/exchanges/bitget");
-  const { getMexcFundingRates }       = await import("../src/lib/exchanges/mexc");
-  const { getGateFundingRates }       = await import("../src/lib/exchanges/gate");
-  const { getHtxFundingRates }        = await import("../src/lib/exchanges/htx");
-  const { getKucoinFundingRates }     = await import("../src/lib/exchanges/kucoin");
-  const { getHyperliquidFundingRates }= await import("../src/lib/exchanges/hyperliquid");
-  const { getTradexyzFundingRates }   = await import("../src/lib/exchanges/tradexyz");
-  const { getAsterDexFundingRates }   = await import("../src/lib/exchanges/asterdex");
+  const { getOkxFundingRates }         = await import("../src/lib/exchanges/okx");
+  const { getBitgetFundingRates }      = await import("../src/lib/exchanges/bitget");
+  const { getMexcFundingRates }        = await import("../src/lib/exchanges/mexc");
+  const { getGateFundingRates }        = await import("../src/lib/exchanges/gate");
+  const { getHtxFundingRates }         = await import("../src/lib/exchanges/htx");
+  const { getKucoinFundingRates }      = await import("../src/lib/exchanges/kucoin");
+  const { getHyperliquidFundingRates } = await import("../src/lib/exchanges/hyperliquid");
+  const { getTradexyzFundingRates }    = await import("../src/lib/exchanges/tradexyz");
 
   console.log("取得各交易所幣種列表...");
 
@@ -386,10 +310,8 @@ async function main() {
   }
 
   const [
-    binance, bybit, okx, bitget, mexc, gate, htx, kucoinRates, hl, tradexyz, aster,
+    okx, bitget, mexc, gate, htx, kucoinRates, hl, tradexyz,
   ] = await Promise.all([
-    symbols("Binance",     getBinanceFundingRates),
-    symbols("Bybit",       getBybitFundingRates),
     symbols("OKX",         getOkxFundingRates),
     symbols("Bitget",      getBitgetFundingRates),
     symbols("MEXC",        getMexcFundingRates),
@@ -398,11 +320,8 @@ async function main() {
     getKucoinFundingRates().catch(() => []),
     symbols("Hyperliquid", getHyperliquidFundingRates),
     symbols("Trade.xyz",   getTradexyzFundingRates),
-    symbols("AsterDEX",    getAsterDexFundingRates),
   ]);
 
-  await collectBinance(binance);
-  await collectBybit(bybit);
   await collectOkx(okx);
   await collectBitget(bitget);
   await collectMexc(mexc);
@@ -411,7 +330,6 @@ async function main() {
   await collectKucoin(kucoinRates as Array<{ symbol: string; rate: number; nextFundingTime: number }>);
   await collectHyperliquid(hl);
   await collectTradexyz(tradexyz);
-  await collectAsterdex(aster);
 
   // 清理超過 35 天的舊資料
   const cutoff = Date.now() - 35 * 86_400_000;
