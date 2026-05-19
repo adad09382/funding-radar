@@ -15,7 +15,6 @@ const NAV = [
   { href: "/arbitrage", label: "套利排行", enabled: true },
   { href: "/rwa", label: "RWA 專區", enabled: true },
   { href: "/stable", label: "穩定費率", enabled: true },
-  { href: "/history", label: "歷史走勢", enabled: false },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

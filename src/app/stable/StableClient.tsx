@@ -13,8 +13,16 @@ const RWA_CATEGORY_LABEL: Record<string, { label: string; cls: string }> = {
   forex:     { label: "外匯",   cls: "bg-teal-500/15 text-teal-400 border-teal-500/30" },
 };
 
-// symbol → category map，只取主要 symbol（不含 symbolOverride）
-const RWA_MAP = new Map(RWA_ASSETS.map((a) => [a.symbol, a.category]));
+// symbol → category map，包含所有 symbolOverride（e.g. AAPLSTOCK → stock）
+const RWA_MAP = new Map<string, string>();
+for (const a of RWA_ASSETS) {
+  RWA_MAP.set(a.symbol, a.category);
+  if (a.symbolOverride) {
+    for (const sym of Object.values(a.symbolOverride)) {
+      RWA_MAP.set(sym, a.category);
+    }
+  }
+}
 
 function Hint({ text }: { text: string }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
