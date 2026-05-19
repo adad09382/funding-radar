@@ -6,11 +6,10 @@ import { getAsterDexFundingRates } from "@/lib/exchanges/asterdex";
 
 export const dynamic = "force-dynamic";
 
-const NEW_SYMBOL_LOOKBACK = 7 * 86_400_000;
-const BATCH = 50;   // 每批並行請求數
-const DELAY = 50;   // 批次間間隔 ms
+export const maxDuration = 60; // Vercel Pro: 60s；Hobby: capped at 10s
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const NEW_SYMBOL_LOOKBACK = 7 * 86_400_000;
+const BATCH = 100;  // 每批並行請求數（提高並行度，減少總耗時）
 
 function ft(url: string, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
@@ -95,7 +94,6 @@ async function collect(
       .filter((r): r is PromiseFulfilledResult<ReturnType<typeof binanceFetch> extends Promise<infer T> ? T : never> => r.status === "fulfilled")
       .flatMap((r) => r.value as Array<{ symbol: string; exchange: string; rate: number; fundingTime: number }>);
     total += await upsert(records);
-    if (i + BATCH < symbols.length) await sleep(DELAY);
   }
   return total;
 }
