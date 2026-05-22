@@ -34,14 +34,17 @@ export async function getLighterFundingRates(): Promise<FundingRate[]> {
   // 只取 Lighter 自己的費率（其餘是 Binance/Bybit/Hyperliquid 參考費率）
   return json.funding_rates
     .filter((r) => r.exchange === "lighter" && r.symbol && r.rate !== undefined)
-    .map((r) => ({
-      symbol: r.symbol,
-      exchange: "lighter" as const,
-      rate: r.rate,
-      nextFundingTime: nextHourBoundary(),
-      // Lighter 每小時結算
-      annualizedRate: r.rate * 24 * 365,
-    }));
+    .map((r) => {
+      // Lighter's endpoint returns an 8h-equivalent rate, while funding settles hourly.
+      const hourlyRate = r.rate / 8;
+      return {
+        symbol: r.symbol,
+        exchange: "lighter" as const,
+        rate: hourlyRate,
+        nextFundingTime: nextHourBoundary(),
+        annualizedRate: hourlyRate * 24 * 365,
+      };
+    });
 }
 
 function nextHourBoundary(): number {
