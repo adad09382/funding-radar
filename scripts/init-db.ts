@@ -42,6 +42,14 @@ async function main() {
     ON funding_rates (exchange, symbol, funding_time DESC)
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS stable_snapshot (
+      window_days INTEGER PRIMARY KEY,
+      data        TEXT    NOT NULL,
+      updated_at  INTEGER NOT NULL
+    )
+  `);
+
   console.log("DB 初始化完成");
 }
 

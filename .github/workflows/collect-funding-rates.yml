@@ -40,3 +40,9 @@ jobs:
         run: |
           curl -f --max-time 120 -X POST \
             "${{ secrets.COLLECT_URL }}/api/collect?secret=${{ secrets.COLLECT_SECRET }}"
+
+      - name: 刷新 stable snapshot
+        run: npx tsx scripts/refresh-stable-snapshot.ts
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
