@@ -214,6 +214,28 @@ async function verifyHtx() {
   }
 }
 
+// ─── KuCoin ───────────────────────────────────────────────────────────────────
+
+function toKucoinSymbol(symbol: string): string {
+  return symbol === "BTC" ? "XBTUSDTM" : `${symbol}USDTM`;
+}
+
+async function verifyKucoin() {
+  console.log("\n[KuCoin]");
+  const sym = await pickSymbol("kucoin");
+  if (!sym) return console.log("  no data");
+  console.log(`  symbol: ${sym}`);
+  for (const s of await dbSamples("kucoin", sym)) {
+    await sleep(250);
+    type Row = { fundingRate: string; timepoint: number };
+    const data = await get<{ data?: { dataList?: Row[] } }>(
+      `https://api-futures.kucoin.com/api/v1/funding-history?symbol=${toKucoinSymbol(sym)}&from=${s.funding_time}&to=${s.funding_time + 1000}&reverse=true&maxCount=10`
+    );
+    const item = data?.data?.dataList?.find((d) => d.timepoint === s.funding_time);
+    record(ts(s.funding_time), s.rate, item ? parseFloat(item.fundingRate) : null);
+  }
+}
+
 // ─── Hyperliquid ──────────────────────────────────────────────────────────────
 
 async function verifyHyperliquid() {
@@ -284,6 +306,7 @@ async function main() {
   await verifyMexc();
   await verifyGate();
   await verifyHtx();
+  await verifyKucoin();
   await verifyHyperliquid();
   await verifyTradexyz();
   await verifyAsterdex();

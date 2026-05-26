@@ -36,6 +36,12 @@ async function main() {
     ON funding_rates (symbol, exchange, funding_time ASC)
   `);
 
+  // getLatest() 用 WHERE exchange = ? GROUP BY symbol，需要 exchange 首欄
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_fr_exchange_sym_time
+    ON funding_rates (exchange, symbol, funding_time DESC)
+  `);
+
   console.log("DB 初始化完成");
 }
 

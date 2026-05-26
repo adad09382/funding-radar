@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
 
     if (!pass1.rows.length) {
       setCached(windowDays, []);
-      return Response.json([]);
+      return Response.json([], {
+        headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+      });
     }
 
     const inClause = pass1.rows
@@ -111,7 +113,9 @@ export async function GET(req: NextRequest) {
     assets.sort((a, b) => Math.abs(b.annMedian) - Math.abs(a.annMedian));
 
     setCached(windowDays, assets);
-    return Response.json(assets);
+    return Response.json(assets, {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+    });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }

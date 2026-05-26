@@ -220,13 +220,36 @@ async function collectHtx(symbols: string[]) {
 }
 
 // ─── KuCoin ───────────────────────────────────────────────────────────────────
-// 歷史 API 需驗證，改存當前預測費率（nextFundingTime）
 
-async function collectKucoin(rates: Array<{ symbol: string; rate: number; nextFundingTime: number }>) {
-  console.log(`\n[KuCoin] ${rates.length} 筆預測費率...`);
-  const total = await insertBatch(
-    rates.map((r) => ({ symbol: r.symbol, exchange: "kucoin", rate: r.rate, fundingTime: r.nextFundingTime }))
-  );
+function toKucoinSymbol(symbol: string): string {
+  return symbol === "BTC" ? "XBTUSDTM" : `${symbol}USDTM`;
+}
+
+async function collectKucoin(symbols: string[]) {
+  console.log(`\n[KuCoin] ${symbols.length} 個幣種...`);
+  const latest = await getLatestTimes("kucoin");
+  let total = 0;
+  for (const sym of symbols) {
+    await sleep(DELAY);
+    try {
+      const since = startOf(latest.get(sym));
+      const res = await fetchWithTimeout(
+        `https://api-futures.kucoin.com/api/v1/funding-history?symbol=${toKucoinSymbol(sym)}&from=${since}&to=${Date.now()}&reverse=true&maxCount=1000`
+      );
+      if (!res.ok) continue;
+      const json: {
+        data?: { dataList?: Array<{ fundingRate: string; timepoint: number }> };
+      } = await res.json();
+      total += await insertBatch(
+        (json.data?.dataList ?? []).map((d) => ({
+          symbol: sym,
+          exchange: "kucoin",
+          rate: parseFloat(d.fundingRate),
+          fundingTime: d.timepoint,
+        }))
+      );
+    } catch {}
+  }
   console.log(`[KuCoin] +${total} 筆`);
 }
 
@@ -310,14 +333,14 @@ async function main() {
   }
 
   const [
-    okx, bitget, mexc, gate, htx, kucoinRates, hl, tradexyz,
+    okx, bitget, mexc, gate, htx, kucoin, hl, tradexyz,
   ] = await Promise.all([
     symbols("OKX",         getOkxFundingRates),
     symbols("Bitget",      getBitgetFundingRates),
     symbols("MEXC",        getMexcFundingRates),
     symbols("Gate.io",     getGateFundingRates),
     symbols("HTX",         getHtxFundingRates),
-    getKucoinFundingRates().catch(() => []),
+    symbols("KuCoin",      getKucoinFundingRates),
     symbols("Hyperliquid", getHyperliquidFundingRates),
     symbols("Trade.xyz",   getTradexyzFundingRates),
   ]);
@@ -327,7 +350,7 @@ async function main() {
   await collectMexc(mexc);
   await collectGate(gate);
   await collectHtx(htx);
-  await collectKucoin(kucoinRates as Array<{ symbol: string; rate: number; nextFundingTime: number }>);
+  await collectKucoin(kucoin);
   await collectHyperliquid(hl);
   await collectTradexyz(tradexyz);
 
