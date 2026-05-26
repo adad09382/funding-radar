@@ -24,6 +24,12 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
+      - name: 確保 index 存在（冪等，IF NOT EXISTS）
+        run: npx tsx scripts/add-index.ts
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
       - name: 增量補齊（OKX / Bitget / MEXC / Gate / HTX / KuCoin / Hyperliquid / Trade.xyz）
         run: npx tsx scripts/incremental.ts
         env:
