@@ -37,6 +37,7 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
       - name: 增量補齊（Binance / Bybit / AsterDEX，經 Vercel）
+        continue-on-error: true
         run: |
           curl -f --max-time 120 -X POST \
             "${{ secrets.COLLECT_URL }}/api/collect?secret=${{ secrets.COLLECT_SECRET }}"
