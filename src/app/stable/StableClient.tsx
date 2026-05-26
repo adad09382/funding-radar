@@ -258,7 +258,7 @@ export function StableClient({ initialWindow }: Props) {
                 </td>
               </tr>
             )}
-            {assets.map((a, i) => (
+            {!error && assets.map((a, i) => (
               <tr
                 key={`${a.symbol}-${a.exchange}`}
                 className="border-b border-zinc-800/60 hover:bg-zinc-900/50"
@@ -305,7 +305,7 @@ export function StableClient({ initialWindow }: Props) {
         </table>
       </div>
 
-      {assets.length > 0 && (
+      {!error && assets.length > 0 && (
         <p className="text-xs text-zinc-600">
           顯示前 {assets.length} 筆 · 年化 = 期間費率 × 年結算次數 · 最差為該期間單次最不利結算
         </p>
