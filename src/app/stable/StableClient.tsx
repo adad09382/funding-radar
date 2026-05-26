@@ -103,12 +103,18 @@ export function StableClient({ initialWindow }: Props) {
   const [sort, setSort] = useState<SortMode>("yield");
   const [rawAssets, setRawAssets] = useState<StableAsset[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     startTransition(async () => {
       const res = await fetch(`/api/stable?window=${initialWindow}`);
-      if (res.ok) setRawAssets(await res.json());
+      if (res.ok) {
+        setRawAssets(await res.json());
+        setError(false);
+      } else {
+        setError(true);
+      }
       setInitialLoading(false);
     });
   }, []);
@@ -129,7 +135,12 @@ export function StableClient({ initialWindow }: Props) {
     setActiveWindow(w);
     startTransition(async () => {
       const res = await fetch(`/api/stable?window=${w}`);
-      if (res.ok) setRawAssets(await res.json());
+      if (res.ok) {
+        setRawAssets(await res.json());
+        setError(false);
+      } else {
+        setError(true);
+      }
     });
   }
 
@@ -227,7 +238,20 @@ export function StableClient({ initialWindow }: Props) {
                 </td>
               </tr>
             )}
-            {!initialLoading && assets.length === 0 && (
+            {!initialLoading && error && (
+              <tr>
+                <td colSpan={10} className="py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <span className="text-3xl">🛠</span>
+                    <p className="text-zinc-300 font-medium">資料暫時無法取得</p>
+                    <p className="text-zinc-500 text-xs max-w-xs">
+                      歷史費率資料庫正在維護中，功能將在近期自動恢復。
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!initialLoading && !error && assets.length === 0 && (
               <tr>
                 <td colSpan={10} className="text-center py-10 text-zinc-500 text-sm">
                   暫無資料
