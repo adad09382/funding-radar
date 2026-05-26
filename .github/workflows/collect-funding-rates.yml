@@ -39,7 +39,7 @@ jobs:
       - name: 增量補齊（Binance / Bybit / AsterDEX，經 Vercel）
         continue-on-error: true
         run: |
-          curl -f --max-time 120 -X POST \
+          curl --fail-with-body --max-time 120 -X POST \
             "${{ secrets.COLLECT_URL }}/api/collect?secret=${{ secrets.COLLECT_SECRET }}"
 
       - name: 刷新 stable snapshot
