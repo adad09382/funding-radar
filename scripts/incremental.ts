@@ -354,10 +354,10 @@ async function main() {
   await collectHyperliquid(hl);
   await collectTradexyz(tradexyz);
 
-  // 清理超過 35 天的舊資料
-  const cutoff = Date.now() - 35 * 86_400_000;
+  // 清理超過 30 天的舊資料（max window = 30d，不需要保留更多）
+  const cutoff = Date.now() - 30 * 86_400_000;
   const del = await db.execute(`DELETE FROM funding_rates WHERE funding_time < ${cutoff}`);
-  console.log(`\n清理: ${del.rowsAffected} 筆 (>35天)`);
+  console.log(`\n清理: ${del.rowsAffected} 筆 (>30天)`);
 
   const elapsed = Math.round((Date.now() - startedAt) / 1000);
   console.log(`✓ 完成，耗時 ${Math.floor(elapsed / 60)}m ${elapsed % 60}s`);

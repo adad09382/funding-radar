@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       if (snap.rows.length) {
         const assets = JSON.parse(snap.rows[0].data as string) as StableAsset[];
         return Response.json(assets, {
-          headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+          headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=300" },
         });
       }
     }
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     // Fallback：snapshot 尚未建立，或 window 不在預計算範圍內
     const assets = await computeStableAssets(db, windowDays);
     return Response.json(assets, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=300" },
     });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
