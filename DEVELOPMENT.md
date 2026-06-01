@@ -7,13 +7,16 @@
 ## 技術架構
 
 ```
-GitHub Actions（每 8 小時）
-  ├─ 首次執行：回填各交易所 180 天歷史結算紀錄
-  └─ 增量執行：補上次 funding_time 之後的新結算
+GitHub Actions（每 4 小時）
+  ├─ init-db.ts          → 建表 / 確保 schema 正確（冪等）
+  ├─ add-index.ts        → 確保 index 存在（冪等）
+  ├─ incremental.ts      → 增量補齊新結算紀錄
+  ├─ /api/collect curl   → Binance / Bybit / AsterDEX 增量補齊
+  └─ refresh-stable-snapshot.ts → 更新 stable_snapshot（per-window 冷卻）
 
-Vercel（Next.js 14）
+Vercel（Next.js）
   ├─ 即時資料  → 直接打交易所 API（60s cache）
-  ├─ 穩定費率分析 → 查 Turso（180 天真實結算歷史）
+  ├─ 穩定費率分析 → 讀 stable_snapshot（預計算結果，CDN 30 分鐘 cache）
   └─ 歷史走勢圖 → 交易所歷史 API（on-demand）
 ```
 
@@ -118,17 +121,17 @@ Vercel（Next.js 14）
 
 | 路由 | 說明 | 資料來源 | Cache |
 |---|---|---|---|
-| `/` | 費率總覽，跨交易所對比表 | 所有交易所即時 API | 60s |
+| `/` | redirect → `/arbitrage` | — | — |
 | `/arbitrage` | 套利機會排行，按年化收益排序 | 所有交易所即時 API | 60s |
-| `/stable` | 期現套利標的篩選（長期穩定正/負費率） | Turso 歷史結算資料 | 1h |
+| `/stable` | 期現套利標的篩選（長期穩定正/負費率） | `stable_snapshot` 表（預計算） | CDN 30min |
 | `/rwa` | RWA 代幣專區 | 所有交易所即時 API | 60s |
-| `/history` | 歷史費率走勢圖（互動式） | 交易所歷史 API | on-demand |
 
 ---
 
 ## 資料庫 Schema
 
 ```sql
+-- 主表：每一次真實費率結算事件
 CREATE TABLE funding_rates (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   symbol       TEXT    NOT NULL,
@@ -138,16 +141,31 @@ CREATE TABLE funding_rates (
   UNIQUE (symbol, exchange, funding_time)
 );
 
+-- 時間範圍查詢（/api/stable pass1、pass2 用）
 CREATE INDEX idx_funding_rates_funding_time
 ON funding_rates (funding_time DESC);
+
+-- 覆蓋索引：symbol + exchange 範圍查詢
+CREATE INDEX idx_fr_sym_ex_time
+ON funding_rates (symbol, exchange, funding_time ASC);
+
+-- getLatest() 用：WHERE exchange = ? GROUP BY symbol，exchange 必須在首欄
+CREATE INDEX idx_fr_exchange_sym_time
+ON funding_rates (exchange, symbol, funding_time DESC);
+
+-- 預計算快照：/api/stable 直接讀這張表，避免每次請求都掃 funding_rates
+CREATE TABLE stable_snapshot (
+  window_days INTEGER PRIMARY KEY,   -- 7 / 14 / 30
+  data        TEXT    NOT NULL,      -- JSON array of StableAsset[]
+  updated_at  INTEGER NOT NULL       -- 寫入時間（ms）
+);
 ```
 
 **設計說明：**
 - `funding_time` = 交易所實際結算的時間戳，是天然的唯一鍵
-- 拿掉 `next_funding_time`（預告時間，無分析價值）
-- 拿掉 `recorded_at`（採集時間，非結算時間）
 - `INSERT OR IGNORE` 天然去重，重跑或補跑不影響資料正確性
-- 保留最近 180 天，每次 GitHub Actions 執行後自動清理
+- 保留最近 **30 天**（max window = 30d，超過無分析價值）
+- `stable_snapshot` 由 `refresh-stable-snapshot.ts` 寫入，API 只讀不寫
 
 ---
 
@@ -163,15 +181,15 @@ ON funding_rates (funding_time DESC);
 
 ## 環境變數
 
-```bash
-TURSO_DATABASE_URL=libsql://your-db-name.turso.io
-TURSO_AUTH_TOKEN=your-turso-auth-token
-```
+| 變數 | 用途 | 設定位置 |
+|------|------|---------|
+| `TURSO_DATABASE_URL` | Turso DB 連線 URL | `.env.local` / Vercel / GitHub Secrets |
+| `TURSO_AUTH_TOKEN` | Turso DB 認證 token | `.env.local` / Vercel / GitHub Secrets |
+| `COLLECT_URL` | Vercel 部署網址（供 GitHub Actions curl 呼叫） | GitHub Secrets |
+| `COLLECT_SECRET` | `/api/collect` 的驗證密鑰 | `.env.local` / Vercel / GitHub Secrets |
+| `TURSO_API_TOKEN` | Turso **Platform** API token（配額監控用，非 DB token）| GitHub Secrets |
 
-需設定在：
-- `.env.local`（本地開發）
-- Vercel 環境變數
-- GitHub Actions Secrets（`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`）
+取得 `TURSO_API_TOKEN`：Turso 儀表板 → Account Settings → API Tokens → 建立新 token。
 
 ---
 
@@ -268,6 +286,49 @@ npx tsx scripts/backfill.ts   # 回填 180 天歷史結算紀錄（首次執行�
 - [ ] **警報系統**：費率超過閾值時發送 Telegram / Email 通知
 - [ ] **GRVT 整合**：需要獨立 WebSocket 中繼伺服器（Railway/Fly.io）
 - [ ] Ourbit：已確認無公開 API，跳過
+
+---
+
+## Turso 讀取配額管理
+
+Turso 免費版限制：**500M rows read / 月**。2026-05 月底曾因全表掃描耗盡配額，DB 封鎖至月初重置。
+
+### 每月讀取量估算
+
+| 來源 | 每次讀取 | 次數/月 | 小計 |
+|------|---------|---------|------|
+| `incremental.ts` getLatestTimes（11 交易所）| ~120k | 180 | ~22M |
+| `refresh` 7d window | ~500k | 180 | ~90M |
+| `refresh` 14d window | ~1M | 90（8h 冷卻）| ~90M |
+| `refresh` 30d window | ~2.2M | 30（23h 冷卻）| ~66M |
+| `/api/collect` curl getLatestTimes | ~350k | 180 | ~63M |
+| **合計** | | | **~331M** |
+
+安全邊際約 1.5 倍，月底不應再封鎖。
+
+### 關鍵設計決策
+
+1. **`stable_snapshot` materialized table**：`/api/stable` 不再每次請求都掃 `funding_rates`，改由 collect workflow 預計算後寫入 `stable_snapshot`，API 讀一行 JSON 即可。
+2. **per-window 刷新冷卻**：7d 每次刷新，14d 冷卻 8h，30d 冷卻 23h。30d 是長期趨勢，落後 24h 對分析結果影響 < 0.3%。
+3. **`idx_fr_exchange_sym_time`**：`getLatest()` 使用 `WHERE exchange = ? GROUP BY symbol`，exchange 必須在 index 首欄才能走 index seek。
+4. **資料保留 30 天**：max window = 30d，超過無分析價值，每次 workflow 自動清理。
+5. **CDN cache 30 分鐘**：`/api/stable` 回應加 `s-maxage=1800`，Vercel CDN 擋住高頻訪問。
+
+### 配額監控
+
+`scripts/check-quota.sh` 在每次 workflow 結束後查詢 Turso Platform API：
+- 超過 400M（80%）→ 印警告
+- 超過 450M（90%）→ `exit 1`，觸發 GitHub Actions 失敗通知（會收到 email）
+
+需在 GitHub Secrets 設定 `TURSO_API_TOKEN`。
+
+### 月初操作清單
+
+配額在每月 1 日重置。無需手動操作，workflow 自動執行：
+1. `init-db.ts` 確保 schema 正確
+2. `add-index.ts` 確保 index 存在
+3. `incremental.ts` 補齊新資料
+4. `refresh-stable-snapshot.ts` 更新 snapshot
 
 ---
 
