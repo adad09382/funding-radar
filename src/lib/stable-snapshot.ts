@@ -85,8 +85,30 @@ export async function computeStableAssets(db: Client, windowDays: number): Promi
 
 export const SNAPSHOT_WINDOWS = [7, 14, 30] as const;
 
+// 各 window 的最短刷新間隔：7d 每次都跑，14d 每 8h，30d 每 24h
+const COOLDOWNS: Record<number, number> = {
+  7:  0,
+  14: 8  * 60 * 60 * 1000,
+  30: 23 * 60 * 60 * 1000,
+};
+
 export async function refreshSnapshot(db: Client): Promise<void> {
+  // 一次取出所有 window 的上次更新時間
+  const existing = await db.execute("SELECT window_days, updated_at FROM stable_snapshot");
+  const lastUpdated = new Map(
+    existing.rows.map((r) => [r.window_days as number, r.updated_at as number])
+  );
+
   for (const w of SNAPSHOT_WINDOWS) {
+    const age = Date.now() - (lastUpdated.get(w) ?? 0);
+    const cooldown = COOLDOWNS[w];
+
+    if (cooldown > 0 && age < cooldown) {
+      const h = (age / 3_600_000).toFixed(1);
+      console.log(`  window=${w}d → 跳過（上次更新 ${h}h 前，冷卻 ${cooldown / 3_600_000}h）`);
+      continue;
+    }
+
     const assets = await computeStableAssets(db, w);
     await db.execute({
       sql: `INSERT OR REPLACE INTO stable_snapshot (window_days, data, updated_at) VALUES (?, ?, ?)`,
