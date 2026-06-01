@@ -5,6 +5,12 @@
 
 set -e
 
+if [ -z "${TURSO_API_TOKEN}" ]; then
+  echo "TURSO_API_TOKEN 未設定，跳過配額檢查。"
+  echo "請至 Turso 儀表板 → Account Settings → API Tokens 建立 token，加入 GitHub Secrets。"
+  exit 0
+fi
+
 LIMIT=500000000
 WARN_AT=400000000   # 80%
 FAIL_AT=450000000   # 90%

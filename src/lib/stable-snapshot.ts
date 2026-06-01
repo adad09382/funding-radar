@@ -83,10 +83,14 @@ export async function computeStableAssets(db: Client, windowDays: number): Promi
   return assets;
 }
 
-export const SNAPSHOT_WINDOWS = [7, 14, 30] as const;
+// 需與 StableClient.tsx 的 WINDOWS 保持一致
+export const SNAPSHOT_WINDOWS = [1, 3, 5, 7, 14, 30] as const;
 
-// 各 window 的最短刷新間隔：7d 每次都跑，14d 每 8h，30d 每 24h
+// 各 window 的最短刷新間隔：小 window 每次都跑，14d 每 8h，30d 每 24h
 const COOLDOWNS: Record<number, number> = {
+  1:  0,
+  3:  0,
+  5:  0,
   7:  0,
   14: 8  * 60 * 60 * 1000,
   30: 23 * 60 * 60 * 1000,
