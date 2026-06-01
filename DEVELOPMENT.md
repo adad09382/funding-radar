@@ -298,11 +298,11 @@ Turso 免費版限制：**500M rows read / 月**。2026-05 月底曾因全表掃
 | 來源 | 每次讀取 | 次數/月 | 小計 |
 |------|---------|---------|------|
 | `incremental.ts` getLatestTimes（11 交易所）| ~120k | 180 | ~22M |
-| `refresh` 7d window | ~500k | 180 | ~90M |
+| `refresh` 1/3/5/7d windows | ~820k | 180 | ~148M |
 | `refresh` 14d window | ~1M | 90（8h 冷卻）| ~90M |
 | `refresh` 30d window | ~2.2M | 30（23h 冷卻）| ~66M |
 | `/api/collect` curl getLatestTimes | ~350k | 180 | ~63M |
-| **合計** | | | **~331M** |
+| **合計** | | | **~389M** |
 
 安全邊際約 1.5 倍，月底不應再封鎖。
 
