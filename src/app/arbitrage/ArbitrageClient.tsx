@@ -57,7 +57,7 @@ export function ArbitrageClient({ serverRates }: { serverRates: FundingRate[] })
         setClientLoading(false);
       }
     );
-  }, []);
+  }, [serverRates]);
 
   const opportunities = buildArbitrageList(rates);
 

@@ -54,7 +54,7 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
         setClientLoading(false);
       }
     );
-  }, []);
+  }, [serverRates]);
 
   function handleExchangeClick(ex: Exchange) {
     if (sortExchange !== ex) {
@@ -95,7 +95,7 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
     }
   }
 
-  function ExchangeHeaders() {
+  function renderExchangeHeaders() {
     return (
       <>
         {RWA_EXCHANGES.map((ex) => {
@@ -126,15 +126,17 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
     );
   }
 
-  function AssetRow({
+  function renderAssetRow({
     asset,
+    rowKey,
     showCategoryChip,
   }: {
     asset: (typeof RWA_ASSETS)[0];
+    rowKey: string;
     showCategoryChip: boolean;
   }) {
     return (
-      <TableRow className="border-zinc-800 hover:bg-zinc-900/50">
+      <TableRow key={rowKey} className="border-zinc-800 hover:bg-zinc-900/50">
         <TableCell>
           <div className="flex items-start gap-2">
             <div>
@@ -216,12 +218,12 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
                 <TableHead className="text-zinc-400 w-44">資產</TableHead>
-                <ExchangeHeaders />
+                {renderExchangeHeaders()}
               </TableRow>
             </TableHeader>
             <TableBody>
               {flatSorted.map((asset) => (
-                <AssetRow key={asset.symbol} asset={asset} showCategoryChip />
+                renderAssetRow({ asset, rowKey: asset.symbol, showCategoryChip: true })
               ))}
             </TableBody>
           </Table>
@@ -240,12 +242,12 @@ export function RwaClient({ serverRates }: { serverRates: FundingRate[] }) {
                   <TableHeader>
                     <TableRow className="border-zinc-800 hover:bg-transparent">
                       <TableHead className="text-zinc-400 w-44">資產</TableHead>
-                      <ExchangeHeaders />
+                      {renderExchangeHeaders()}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {assets.map((asset) => (
-                      <AssetRow key={asset.symbol} asset={asset} showCategoryChip={false} />
+                      renderAssetRow({ asset, rowKey: asset.symbol, showCategoryChip: false })
                     ))}
                   </TableBody>
                 </Table>

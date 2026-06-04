@@ -117,7 +117,7 @@ export function StableClient({ initialWindow }: Props) {
       }
       setInitialLoading(false);
     });
-  }, []);
+  }, [initialWindow]);
 
   // Sort is client-side — no API call needed
   const assets = useMemo(() => {
