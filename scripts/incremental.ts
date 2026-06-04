@@ -1,5 +1,10 @@
 import { createClient } from "@libsql/client";
 import { readFileSync } from "fs";
+import {
+  getLatestFundingTimes,
+  syncLatestFundingTimes,
+  type FundingRecord,
+} from "../src/lib/funding-db";
 
 try {
   const text = readFileSync(".env.local", "utf-8");
@@ -27,16 +32,12 @@ function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
-async function getLatestTimes(exchange: string): Promise<Map<string, number>> {
-  const r = await db.execute(
-    `SELECT symbol, MAX(funding_time) as t FROM funding_rates WHERE exchange = ? GROUP BY symbol`,
-    [exchange]
-  );
-  return new Map(r.rows.map((row) => [row.symbol as string, row.t as number]));
+async function getLatestTimes(exchange: string, symbols: string[]): Promise<Map<string, number>> {
+  return getLatestFundingTimes(db, exchange, symbols);
 }
 
 async function insertBatch(
-  records: Array<{ symbol: string; exchange: string; rate: number; fundingTime: number }>
+  records: FundingRecord[]
 ) {
   if (!records.length) return 0;
   const CHUNK = 100;
@@ -49,6 +50,7 @@ async function insertBatch(
       }))
     );
   }
+  await syncLatestFundingTimes(db, records);
   return records.length;
 }
 
@@ -60,7 +62,7 @@ function startOf(latest: number | undefined): number {
 
 async function collectOkx(symbols: string[]) {
   console.log(`\n[OKX] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("okx");
+  const latest = await getLatestTimes("okx", symbols);
   let total = 0;
   for (const sym of symbols) {
     const since = startOf(latest.get(sym));
@@ -94,7 +96,7 @@ async function collectOkx(symbols: string[]) {
 
 async function collectBitget(symbols: string[]) {
   console.log(`\n[Bitget] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("bitget");
+  const latest = await getLatestTimes("bitget", symbols);
   let total = 0;
   for (const sym of symbols) {
     const since = startOf(latest.get(sym));
@@ -129,7 +131,7 @@ async function collectBitget(symbols: string[]) {
 
 async function collectMexc(symbols: string[]) {
   console.log(`\n[MEXC] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("mexc");
+  const latest = await getLatestTimes("mexc", symbols);
   let total = 0;
   for (const sym of symbols) {
     const since = startOf(latest.get(sym));
@@ -163,7 +165,7 @@ async function collectMexc(symbols: string[]) {
 
 async function collectGate(symbols: string[]) {
   console.log(`\n[Gate.io] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("gate");
+  const latest = await getLatestTimes("gate", symbols);
   let total = 0;
   const to = Math.floor(Date.now() / 1000);
   for (const sym of symbols) {
@@ -188,7 +190,7 @@ async function collectGate(symbols: string[]) {
 
 async function collectHtx(symbols: string[]) {
   console.log(`\n[HTX] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("htx");
+  const latest = await getLatestTimes("htx", symbols);
   let total = 0;
   for (const sym of symbols) {
     const since = startOf(latest.get(sym));
@@ -227,7 +229,7 @@ function toKucoinSymbol(symbol: string): string {
 
 async function collectKucoin(symbols: string[]) {
   console.log(`\n[KuCoin] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("kucoin");
+  const latest = await getLatestTimes("kucoin", symbols);
   let total = 0;
   for (const sym of symbols) {
     await sleep(DELAY);
@@ -257,7 +259,7 @@ async function collectKucoin(symbols: string[]) {
 
 async function collectHyperliquid(symbols: string[]) {
   console.log(`\n[Hyperliquid] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("hyperliquid");
+  const latest = await getLatestTimes("hyperliquid", symbols);
   let total = 0;
   for (const sym of symbols) {
     await sleep(DELAY);
@@ -282,7 +284,7 @@ async function collectHyperliquid(symbols: string[]) {
 
 async function collectTradexyz(symbols: string[]) {
   console.log(`\n[Trade.xyz] ${symbols.length} 個幣種...`);
-  const latest = await getLatestTimes("tradexyz");
+  const latest = await getLatestTimes("tradexyz", symbols);
   let total = 0;
   for (const sym of symbols) {
     await sleep(DELAY);

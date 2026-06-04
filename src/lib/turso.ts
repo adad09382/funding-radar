@@ -1,4 +1,5 @@
 import { createClient } from "@libsql/client";
+import { ensureLatestFundingTimesTable } from "./funding-db";
 
 export const db = createClient({
   url: process.env.TURSO_DATABASE_URL!,
@@ -21,4 +22,11 @@ export async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_funding_rates_funding_time
     ON funding_rates (funding_time DESC)
   `);
+
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_fr_exchange_sym_time
+    ON funding_rates (exchange, symbol, funding_time DESC)
+  `);
+
+  await ensureLatestFundingTimesTable(db);
 }

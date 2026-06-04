@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/turso";
+import {
+  getLatestFundingTimes,
+  syncLatestFundingTimes,
+  type FundingRecord,
+} from "@/lib/funding-db";
 import { getBinanceFundingRates } from "@/lib/exchanges/binance";
 import { getBybitFundingRates } from "@/lib/exchanges/bybit";
 import { getAsterDexFundingRates } from "@/lib/exchanges/asterdex";
@@ -17,19 +22,11 @@ function ft(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(t));
 }
 
-async function getLatest(exchange: string): Promise<Map<string, number>> {
-  const r = await db.execute(
-    `SELECT symbol, MAX(funding_time) as t FROM funding_rates WHERE exchange = ? GROUP BY symbol`,
-    [exchange]
-  );
-  return new Map(r.rows.map((row) => [row.symbol as string, row.t as number]));
-}
-
 function since(latest: number | undefined): number {
   return latest !== undefined ? latest + 1 : Date.now() - NEW_SYMBOL_LOOKBACK;
 }
 
-async function upsert(records: Array<{ symbol: string; exchange: string; rate: number; fundingTime: number }>) {
+async function upsert(records: FundingRecord[]) {
   if (!records.length) return 0;
   const CHUNK = 100;
   for (let i = 0; i < records.length; i += CHUNK) {
@@ -41,6 +38,7 @@ async function upsert(records: Array<{ symbol: string; exchange: string; rate: n
       }))
     );
   }
+  await syncLatestFundingTimes(db, records);
   return records.length;
 }
 
@@ -83,16 +81,16 @@ async function asterFetch(sym: string, start: number) {
 async function collect(
   exchange: string,
   symbols: string[],
-  fetcher: (sym: string, start: number) => Promise<Array<{ symbol: string; exchange: string; rate: number; fundingTime: number }>>
+  fetcher: (sym: string, start: number) => Promise<FundingRecord[]>
 ): Promise<number> {
-  const latest = await getLatest(exchange);
+  const latest = await getLatestFundingTimes(db, exchange, symbols);
   let total = 0;
   for (let i = 0; i < symbols.length; i += BATCH) {
     const batch = symbols.slice(i, i + BATCH);
     const results = await Promise.allSettled(batch.map((sym) => fetcher(sym, since(latest.get(sym)))));
     const records = results
       .filter((r): r is PromiseFulfilledResult<ReturnType<typeof binanceFetch> extends Promise<infer T> ? T : never> => r.status === "fulfilled")
-      .flatMap((r) => r.value as Array<{ symbol: string; exchange: string; rate: number; fundingTime: number }>);
+      .flatMap((r) => r.value as FundingRecord[]);
     total += await upsert(records);
   }
   return total;

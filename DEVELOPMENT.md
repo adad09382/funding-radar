@@ -145,10 +145,6 @@ CREATE TABLE funding_rates (
 CREATE INDEX idx_funding_rates_funding_time
 ON funding_rates (funding_time DESC);
 
--- 覆蓋索引：symbol + exchange 範圍查詢
-CREATE INDEX idx_fr_sym_ex_time
-ON funding_rates (symbol, exchange, funding_time ASC);
-
 -- getLatest() 用：WHERE exchange = ? GROUP BY symbol，exchange 必須在首欄
 CREATE INDEX idx_fr_exchange_sym_time
 ON funding_rates (exchange, symbol, funding_time DESC);
@@ -159,13 +155,23 @@ CREATE TABLE stable_snapshot (
   data        TEXT    NOT NULL,      -- JSON array of StableAsset[]
   updated_at  INTEGER NOT NULL       -- 寫入時間（ms）
 );
+
+-- 最新結算時間 cache：collector 讀這張小表，避免每輪掃 funding_rates 歷史資料
+CREATE TABLE latest_funding_times (
+  exchange            TEXT    NOT NULL,
+  symbol              TEXT    NOT NULL,
+  latest_funding_time INTEGER NOT NULL,
+  PRIMARY KEY (exchange, symbol)
+);
 ```
 
 **設計說明：**
 - `funding_time` = 交易所實際結算的時間戳，是天然的唯一鍵
 - `INSERT OR IGNORE` 天然去重，重跑或補跑不影響資料正確性
+- `UNIQUE (symbol, exchange, funding_time)` 會建立同欄位 autoindex，不另建重複索引
 - 保留最近 **30 天**（max window = 30d，超過無分析價值）
 - `stable_snapshot` 由 `refresh-stable-snapshot.ts` 寫入，API 只讀不寫
+- `latest_funding_times` 是從 `funding_rates` 衍生的 materialized cache，可用 `npm run backfill-latest` 重建
 
 ---
 
@@ -297,12 +303,12 @@ Turso 免費版限制：**500M rows read / 月**。2026-05 月底曾因全表掃
 
 | 來源 | 每次讀取 | 次數/月 | 小計 |
 |------|---------|---------|------|
-| `incremental.ts` getLatestTimes（11 交易所）| ~120k | 180 | ~22M |
+| `incremental.ts` getLatestTimes（11 交易所）| ~5.5k | 180 | ~1M |
 | `refresh` 1/3/5/7d windows | ~820k | 180 | ~148M |
 | `refresh` 14d window | ~1M | 90（8h 冷卻）| ~90M |
 | `refresh` 30d window | ~2.2M | 30（23h 冷卻）| ~66M |
-| `/api/collect` curl getLatestTimes | ~350k | 180 | ~63M |
-| **合計** | | | **~389M** |
+| `/api/collect` curl getLatestTimes | ~1.7k | 180 | ~0.3M |
+| **合計** | | | **~305M** |
 
 安全邊際約 1.5 倍，月底不應再封鎖。
 
@@ -310,9 +316,24 @@ Turso 免費版限制：**500M rows read / 月**。2026-05 月底曾因全表掃
 
 1. **`stable_snapshot` materialized table**：`/api/stable` 不再每次請求都掃 `funding_rates`，改由 collect workflow 預計算後寫入 `stable_snapshot`，API 讀一行 JSON 即可。
 2. **per-window 刷新冷卻**：7d 每次刷新，14d 冷卻 8h，30d 冷卻 23h。30d 是長期趨勢，落後 24h 對分析結果影響 < 0.3%。
-3. **`idx_fr_exchange_sym_time`**：`getLatest()` 使用 `WHERE exchange = ? GROUP BY symbol`，exchange 必須在 index 首欄才能走 index seek。
-4. **資料保留 30 天**：max window = 30d，超過無分析價值，每次 workflow 自動清理。
-5. **CDN cache 30 分鐘**：`/api/stable` 回應加 `s-maxage=1800`，Vercel CDN 擋住高頻訪問。
+3. **`idx_funding_rates_funding_time`**：`stable_snapshot` refresh 的 pass1 強制走時間索引，避免小 window 因 `GROUP BY` 掃近全表。
+4. **`latest_funding_times`**：collector 的 `getLatestTimes()` 讀 `(exchange, symbol)` 最新時間 cache，從每輪掃 30 天歷史資料降到讀幾千列；若 cache 空或缺 symbol，會 fallback 到 `funding_rates GROUP BY`。
+5. **`idx_fr_exchange_sym_time`**：fallback 與 pass2 使用 `WHERE exchange = ? GROUP BY/lookup symbol`，exchange 必須在 index 首欄才能走 index seek。
+6. **資料保留 30 天**：max window = 30d，超過無分析價值，每次 workflow 自動清理。
+7. **CDN cache 30 分鐘**：`/api/stable` 回應加 `s-maxage=1800`，Vercel CDN 擋住高頻訪問。
+
+### latest_funding_times 維護
+
+`latest_funding_times` 不是 source of truth；`funding_rates` 才是。若 cache 疑似不一致，可重建：
+
+```bash
+npm run backfill-latest
+```
+
+安全檢查：
+- backfill 腳本會比對各 exchange 的 source/latest symbol count
+- timestamp mismatch 必須為 `0`
+- rollback 時可把 collector 改回原本 `funding_rates GROUP BY` 查詢，或保留這張 cache 表不使用
 
 ### 配額監控
 

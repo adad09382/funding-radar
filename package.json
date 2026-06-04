@@ -10,6 +10,7 @@
     "init-db": "tsx scripts/init-db.ts",
     "collect": "tsx scripts/collect.ts",
     "backfill": "tsx scripts/backfill.ts",
+    "backfill-latest": "tsx scripts/backfill-latest-funding-times.ts",
     "verify": "tsx scripts/verify.ts",
     "incremental": "tsx scripts/incremental.ts"
   },

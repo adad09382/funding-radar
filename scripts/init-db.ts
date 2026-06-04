@@ -1,5 +1,6 @@
 import { createClient } from "@libsql/client";
 import { readFileSync } from "fs";
+import { ensureLatestFundingTimesTable } from "../src/lib/funding-db";
 
 try {
   const text = readFileSync(".env.local", "utf-8");
@@ -31,11 +32,6 @@ async function main() {
     ON funding_rates (funding_time DESC)
   `);
 
-  await db.execute(`
-    CREATE INDEX IF NOT EXISTS idx_fr_sym_ex_time
-    ON funding_rates (symbol, exchange, funding_time ASC)
-  `);
-
   // getLatest() 用 WHERE exchange = ? GROUP BY symbol，需要 exchange 首欄
   await db.execute(`
     CREATE INDEX IF NOT EXISTS idx_fr_exchange_sym_time
@@ -49,6 +45,8 @@ async function main() {
       updated_at  INTEGER NOT NULL
     )
   `);
+
+  await ensureLatestFundingTimesTable(db);
 
   console.log("DB 初始化完成");
 }

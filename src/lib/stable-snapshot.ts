@@ -11,15 +11,18 @@ export async function computeStableAssets(db: Client, windowDays: number): Promi
   const since = Date.now() - windowDays * 86_400_000;
   const minRecords = Math.max(2, windowDays);
 
-  const pass1 = await db.execute(`
-    SELECT symbol, exchange
-    FROM funding_rates
-    WHERE funding_time >= ${since}
-    GROUP BY symbol, exchange
-    HAVING COUNT(*) >= ${minRecords} AND ABS(AVG(rate)) > 0.000005
-    ORDER BY ABS(AVG(rate)) DESC
-    LIMIT 300
-  `);
+  const pass1 = await db.execute({
+    sql: `
+      SELECT symbol, exchange
+      FROM funding_rates INDEXED BY idx_funding_rates_funding_time
+      WHERE funding_time >= ?
+      GROUP BY symbol, exchange
+      HAVING COUNT(*) >= ? AND ABS(AVG(rate)) > ?
+      ORDER BY ABS(AVG(rate)) DESC
+      LIMIT 300
+    `,
+    args: [since, minRecords, 0.000005],
+  });
 
   if (!pass1.rows.length) return [];
 
